@@ -1,0 +1,39 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Plan a Route{% endblock %}
+{% block nav_plan %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Plan a route</h1>
+  <p class="lede">
+    Pick a source and destination district. SafeRoutes fetches the available
+    road routes between them, scores each against the district safety map,
+    recommends the safest one, and draws a 1.96&times;&sigma; safety buffer
+    around it.
+  </p>
+</div>
+
+<div class="card" style="max-width:520px;">
+  {% if error %}<p style="color:var(--risk-coral);">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div class="field">
+      <label for="source">Source district</label>
+      <select name="source" id="source" required>
+        {% for d in districts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="destination">Destination district</label>
+      <select name="destination" id="destination" required>
+        {% for d in districts %}<option value="{{ d.id }}" {% if forloop.counter == 2 %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" name="simulate_deviation" id="simulate_deviation" checked>
+      <label for="simulate_deviation" style="margin:0;">Simulate a mid-journey deviation (to demo the alert system)</label>
+    </div>
+    <button type="submit" class="btn">Plan &amp; simulate route</button>
+  </form>
+</div>
+{% endblock %}

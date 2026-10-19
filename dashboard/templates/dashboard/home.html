@@ -1,0 +1,101 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Overview{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Safety overview</h1>
+  <p class="lede">
+    Live read-out of the clustering pipeline: every district has been scored
+    against globally recognized safe-city benchmarks and grouped into a
+    safety tier. Use this as the starting point before planning a route.
+  </p>
+</div>
+
+{% if not has_data %}
+  <div class="card empty-state">
+    <h3>No district data yet</h3>
+    <p>Load the real district data (Census 2011 + Kerala Police crime statistics):</p>
+    <p><code>python manage.py load_real_data</code></p>
+  </div>
+{% elif not has_clusters %}
+  <div class="card empty-state">
+    <h3>Data loaded, but not clustered yet</h3>
+    <p>Run the clustering pipeline:</p>
+    <p><code>python manage.py train_clusters</code></p>
+  </div>
+{% else %}
+
+  <div class="grid grid-3">
+    {% for cluster in clusters %}
+      <div class="card stat-card">
+        <span class="tier-chip" style="background:{{ cluster.color_hex }}">
+          <span class="tier-dot"></span> {{ cluster.get_tier_display }}
+        </span>
+        <span class="stat-label">Avg. safety score</span>
+        <span class="stat-value">{{ cluster.avg_safety_score|floatformat:1 }} / 100</span>
+        <span class="stat-label">{{ cluster.district_count }} district{{ cluster.district_count|pluralize }}</span>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid grid-2" style="margin-top:22px;">
+    <div class="card">
+      <h2>Districts &amp; scores</h2>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>District</th>
+              <th>Tier</th>
+              <th>Safety score</th>
+              <th>Crimes vs women / 100k / yr</th>
+              <th>Police / 100k</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in districts %}
+              <tr>
+                <td>{{ d.name }}</td>
+                <td>
+                  {% with a=d.cluster_assignment %}
+                    {% if a %}
+                      <span class="tier-chip" style="background:{{ a.cluster.color_hex }}">{{ a.cluster.tier }}</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td class="mono">{% if d.cluster_assignment %}{{ d.cluster_assignment.safety_score|floatformat:1 }}{% else %}&mdash;{% endif %}</td>
+                <td class="mono">{{ d.crime_rate_per_100k|floatformat:1 }}</td>
+                <td class="mono">{% if d.police_per_100k is not None %}{{ d.police_per_100k|floatformat:1 }}{% else %}&mdash;{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recent alerts</h2>
+      {% if recent_alerts %}
+        {% for a in recent_alerts %}
+          <div class="alert-row">
+            <span class="alert-icon {{ a.severity }}"></span>
+            <div>
+              <strong>{{ a.route.source.name }} &rarr; {{ a.route.destination.name }}</strong>
+              <div style="font-size:0.85rem;color:var(--text-muted);">{{ a.message }}</div>
+            </div>
+          </div>
+        {% endfor %}
+        <p style="margin-top:14px;"><a href="{% url 'dashboard:alerts' %}">View all alerts &rarr;</a></p>
+      {% elif user.is_authenticated %}
+        <p style="color:var(--text-muted);">No alerts yet &mdash; plan a route to see the deviation-detection system in action.</p>
+        <a class="btn" href="{% url 'dashboard:route_planner' %}">Plan a route</a>
+      {% else %}
+        <p style="color:var(--text-muted);">Create an account to plan routes and get deviation alerts.</p>
+        <a class="btn" href="{% url 'accounts:register' %}">Sign up</a>
+      {% endif %}
+    </div>
+  </div>
+
+{% endif %}
+{% endblock %}

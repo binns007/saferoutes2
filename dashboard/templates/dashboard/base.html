@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SafeRoutes{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="{% static 'dashboard/css/style.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="{% url 'dashboard:home' %}" class="brand">
+      <span class="brand-mark"></span> SafeRoutes
+    </a>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="nav-links">
+      <a href="{% url 'dashboard:home' %}" class="{% block nav_home %}{% endblock %}">Overview</a>
+      <a href="{% url 'dashboard:heatmap' %}" class="{% block nav_heatmap %}{% endblock %}">Safety Map</a>
+      <a href="{% url 'dashboard:route_planner' %}" class="{% block nav_plan %}{% endblock %}">Plan a Route</a>
+      <a href="{% url 'dashboard:model_evaluation' %}" class="{% block nav_model %}{% endblock %}">Model</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'dashboard:alerts' %}" class="{% block nav_alerts %}{% endblock %}">Alerts</a>
+        <a href="{% url 'accounts:emergency_contact' %}">Emergency contact</a>
+        {% if user.is_staff %}<a href="/admin/">Admin</a>{% endif %}
+        <span class="nav-user">
+          <span class="who" title="{{ user.email }}">{{ user.email }}</span>
+          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit" class="nav-logout">Log out</button></form>
+        </span>
+      {% else %}
+        <a href="{% url 'accounts:login' %}" class="{% block nav_login %}{% endblock %}">Log in</a>
+        <a href="{% url 'accounts:register' %}" class="{% block nav_register %}{% endblock %}">Sign up</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <main class="page">
+    {% if messages %}
+      <div class="flash-stack" role="status">
+        {% for message in messages %}<div class="flash flash-{{ message.tags }}">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  {# Shared popup-alert modal root: user-only alerts, never sent to any third party #}
+  <div id="sr-modal-root"></div>
+  <form id="sr-csrf-form" style="display:none;">{% csrf_token %}</form>
+
+  <footer class="site-footer">
+    SafeRoutes &mdash; a data-driven approach to women&rsquo;s safety through clustering &amp; GPS integration.
+    Safety scores are derived from published district-level data &mdash; see the <a href="{% url 'dashboard:model_evaluation' %}">Model</a> page for sources and method.
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{% static 'dashboard/js/nav.js' %}"></script>
+  <script src="{% static 'dashboard/js/alert_modal.js' %}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

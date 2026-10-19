@@ -1,0 +1,36 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}SafeRoutes &mdash; Safety Map{% endblock %}
+{% block nav_heatmap %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Safety heatmap</h1>
+  <p class="lede">
+    Each marker is a district center, sized and colored by its safety
+    cluster. Click a marker for the underlying indicators that produced its
+    score.
+  </p>
+</div>
+
+{% if not has_clusters %}
+  <div class="card empty-state">
+    <h3>No cluster data yet</h3>
+    <p>Run <code>python manage.py load_real_data</code> then <code>python manage.py train_clusters</code>.</p>
+  </div>
+{% else %}
+  <div class="card">
+    <div class="map-wrap"><div id="map"></div></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#35C4A1"></span> Tier I &mdash; Benchmark safe</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#7CC6A6"></span> Tier II &mdash; Moderate</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#F2A65A"></span> Tier III &mdash; Elevated risk</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#E8546B"></span> Tier IV &mdash; High risk</span>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'dashboard/js/heatmap.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Alerts{% endblock %}
+{% block nav_alerts %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Deviation alerts</h1>
+  <p class="lede">Every journey of yours that strayed into a high-risk zone beyond the safety buffer shows up here, newest first.</p>
+</div>
+
+<div class="card">
+  {% if alerts %}
+    {% for a in alerts %}
+      <div class="alert-row">
+        <span class="alert-icon {{ a.severity }}"></span>
+        <div style="flex:1;">
+          <strong>{{ a.route.source.name }} &rarr; {{ a.route.destination.name }}</strong>
+          <span style="color:var(--text-muted);font-size:0.82rem;"> &middot; {{ a.created_at|date:"d M Y, H:i" }}</span>
+          <div style="font-size:0.88rem;color:var(--text-muted);">{{ a.message }}</div>
+        </div>
+        <a href="{% url 'dashboard:route_detail' a.route.id %}" class="btn btn-ghost" style="align-self:center;">View route</a>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <h3>No alerts yet</h3>
+      <p>Plan a route with the deviation-simulation option checked to see this in action.</p>
+      <a class="btn" href="{% url 'dashboard:route_planner' %}">Plan a route</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

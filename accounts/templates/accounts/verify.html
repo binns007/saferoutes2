@@ -1,0 +1,25 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Verify your email{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1>Check your email</h1>
+    <p class="lede">
+      We sent a 6-digit code to <strong class="mono">{{ masked_email }}</strong>.
+      It expires in {{ ttl }} minutes.
+    </p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% include "accounts/_field.html" with field=form.code %}
+      <button type="submit" class="btn btn-block">Verify &amp; continue</button>
+    </form>
+    <form method="post" action="{% url 'accounts:resend' %}" class="auth-alt">
+      {% csrf_token %}
+      Didn&rsquo;t get it? Check spam, or
+      <button type="submit" class="link-button">send a new code</button>
+    </form>
+    <p class="auth-alt"><a href="{% url 'accounts:register' %}">Use a different email</a></p>
+  </div>
+</div>
+{% endblock %}

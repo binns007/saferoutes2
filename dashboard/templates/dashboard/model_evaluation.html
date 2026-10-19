@@ -1,0 +1,126 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}SafeRoutes &mdash; Model &amp; data{% endblock %}
+{% block nav_model %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Model &amp; data</h1>
+  <p class="lede">
+    How the safety tiers are produced: what data goes in, which indicators survive feature
+    selection, and the evidence for the number of clusters.
+  </p>
+</div>
+
+{% if not run %}
+  <div class="card empty-state">
+    <h3>No model has been trained yet</h3>
+    <p><code>python manage.py load_real_data</code> then <code>python manage.py train_clusters</code></p>
+  </div>
+{% else %}
+
+<div class="grid grid-2" style="grid-template-columns:1fr 1fr;">
+  <div class="card">
+    <h2>Data</h2>
+    <p><strong>{{ run.n_districts }} districts</strong>, crimes against women averaged over
+      <span class="mono">{{ run.data_years|default:"n/a" }}</span> (Kerala Police statistics), with Census 2011
+      population and literacy. Crime and police figures are per 100,000 population.</p>
+    <p>Scored <strong>{{ run.scoring_reference }}</strong>.</p>
+    <p class="alert-note">Score weights:
+      {% for name, w in run.scoring_weights.items %}<span class="mono">{{ name }} {{ w }}</span>{% if not forloop.last %} &middot; {% endif %}{% endfor %}
+    </p>
+    <p class="alert-note">Trained {{ run.trained_at|date:"d M Y, H:i" }}.</p>
+  </div>
+
+  <div class="card">
+    <h2>Features</h2>
+    <p><strong>Used for clustering:</strong>
+      {% for f in run.features %}<span class="tier-chip" style="background:#1e2a4a">{{ f }}</span> {% endfor %}</p>
+    {% if run.dropped_features %}
+      <p><strong>Dropped during selection:</strong></p>
+      <ul class="plain-list">
+        {% for d in run.dropped_features %}<li><span class="mono">{{ d.feature }}</span> &mdash; {{ d.reason }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+
+{% if run.notes %}<div class="card" style="margin-top:14px;"><p class="alert-note" style="margin:0;"><strong>Note:</strong> {{ run.notes }}</p></div>{% endif %}
+
+<div class="card" style="margin-top:14px;">
+  <h2>How many clusters?</h2>
+  <p class="alert-note">Every k from {{ k_min }} to {{ k_max }} was fitted; look for the elbow in inertia, the peak in silhouette, and the minimum in BIC.</p>
+  <div class="chart-grid">
+    <div><h3>Elbow &mdash; K-Means inertia</h3><div class="chart-box"><canvas id="chart-elbow"></canvas></div></div>
+    <div><h3>Silhouette (higher is better)</h3><div class="chart-box"><canvas id="chart-sil"></canvas></div></div>
+    <div><h3>GMM BIC (lower is better)</h3><div class="chart-box"><canvas id="chart-bic"></canvas></div></div>
+  </div>
+  {{ chart_data|json_script:"chart-data" }}
+
+  <div class="table-scroll" style="margin-top:16px;">
+    <table class="data-table">
+      <thead><tr><th>Algorithm</th><th>k</th><th>Inertia</th><th>BIC</th><th>Silhouette</th><th>Calinski&ndash;Harabasz</th><th>Davies&ndash;Bouldin</th><th></th></tr></thead>
+      <tbody>
+        {% for e in evaluations %}
+          <tr{% if e.selected %} style="background:#eefaf6;"{% endif %}>
+            <td>{{ e.get_algorithm_display }}</td>
+            <td class="mono">{{ e.k }}</td>
+            <td class="mono">{% if e.inertia is not None %}{{ e.inertia|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono">{% if e.bic is not None %}{{ e.bic|floatformat:1 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono">{% if e.silhouette is not None %}{{ e.silhouette|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono">{% if e.calinski_harabasz is not None %}{{ e.calinski_harabasz|floatformat:1 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono">{% if e.davies_bouldin is not None %}{{ e.davies_bouldin|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if e.selected %}<strong>selected</strong>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-2" style="grid-template-columns:1fr 1fr;margin-top:14px;">
+  <div class="card">
+    <h2>Selected clusters (K-Means)</h2>
+    <div class="table-scroll"><table class="data-table">
+      <thead><tr><th>Tier</th><th>Districts</th><th>Avg. score</th><th>Cluster silhouette</th></tr></thead>
+      <tbody>
+        {% for c in clusters %}
+          <tr>
+            <td><span class="tier-chip" style="background:{{ c.color_hex }}">{{ c.tier }}</span></td>
+            <td class="mono">{{ c.district_count }}</td>
+            <td class="mono">{{ c.avg_safety_score|floatformat:1 }}</td>
+            <td class="mono">{% if c.silhouette_score is not None %}{{ c.silhouette_score|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="alert-note">With only {{ run.n_districts }} districts these clusters are indicative, not statistically strong.</p>
+  </div>
+
+  <div class="card">
+    <h2>Correlation of features</h2>
+    {% if pearson %}
+      <h3>Pearson</h3>
+      <div class="table-scroll"><table class="data-table corr-table">
+        <thead><tr><th></th>{% for c in pearson.cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for name, vals in pearson.rows %}<tr><td>{{ name }}</td>{% for v in vals %}<td class="mono">{% if v is not None %}{{ v|floatformat:2 }}{% else %}&mdash;{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+    {% endif %}
+    {% if spearman %}
+      <h3>Spearman</h3>
+      <div class="table-scroll"><table class="data-table corr-table">
+        <thead><tr><th></th>{% for c in spearman.cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for name, vals in spearman.rows %}<tr><td>{{ name }}</td>{% for v in vals %}<td class="mono">{% if v is not None %}{{ v|floatformat:2 }}{% else %}&mdash;{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if run %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{% static 'dashboard/js/model_charts.js' %}"></script>
+{% endif %}
+{% endblock %}

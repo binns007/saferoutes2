@@ -1,0 +1,21 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Create account{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1>Create your account</h1>
+    <p class="lede">We&rsquo;ll email you a 6-digit code to confirm it&rsquo;s really you.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+      {% if form.non_field_errors %}<p class="field-error">{{ form.non_field_errors }}</p>{% endif %}
+      {% include "accounts/_field.html" with field=form.email %}
+      {% include "accounts/_field.html" with field=form.password1 %}
+      {% include "accounts/_field.html" with field=form.password2 %}
+      <button type="submit" class="btn btn-block">Send verification code</button>
+    </form>
+    <p class="auth-alt">Already registered? <a href="{% url 'accounts:login' %}">Log in</a></p>
+  </div>
+</div>
+{% endblock %}

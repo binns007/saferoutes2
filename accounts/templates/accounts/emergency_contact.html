@@ -1,0 +1,44 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Emergency contact{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="card auth-card" style="max-width:520px;">
+    <h1>Emergency contact</h1>
+    <p class="lede">One person SafeRoutes can email if you need help. Optional, and off until you set it up.</p>
+
+    <div class="alert-note" style="margin-bottom:14px;">
+      <strong>How it works.</strong> They get an email &mdash; with your journey and last known position &mdash; only when you press
+      <em>Notify my emergency contact</em>{% if current and current.auto_escalate %}, or when a safety alert goes unanswered for 60 seconds (you turned this on){% endif %}.
+      Nobody else is ever contacted, and your position is never shared otherwise. They are told when you add them.
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}<p class="field-error">{{ form.non_field_errors }}</p>{% endif %}
+      {% include "accounts/_field.html" with field=form.name %}
+      {% include "accounts/_field.html" with field=form.email %}
+      <div class="field{% if form.auto_escalate.errors %} has-error{% endif %}">
+        <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;">
+          {{ form.auto_escalate }} <span>{{ form.auto_escalate.label }}</span>
+        </label>
+        <p class="field-hint">You will see a countdown you can cancel by answering the alert.</p>
+      </div>
+      <div class="field{% if form.confirm.errors %} has-error{% endif %}">
+        <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;">
+          {{ form.confirm }} <span>{{ form.confirm.label }}</span>
+        </label>
+        {% for error in form.confirm.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn-block">{% if current %}Update contact{% else %}Save contact{% endif %}</button>
+    </form>
+
+    {% if current %}
+      <form method="post" style="margin-top:12px;">
+        {% csrf_token %}
+        <button type="submit" name="remove" value="1" class="btn btn-ghost btn-block">Remove {{ current.name }}</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

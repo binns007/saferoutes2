@@ -1,0 +1,20 @@
+{% extends "dashboard/base.html" %}
+{% block title %}SafeRoutes &mdash; Log in{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1>Welcome back</h1>
+    <p class="lede">Log in to plan routes and see your alerts.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      {% if form.non_field_errors %}<p class="field-error">{{ form.non_field_errors }}</p>{% endif %}
+      {% include "accounts/_field.html" with field=form.email %}
+      {% include "accounts/_field.html" with field=form.password %}
+      <button type="submit" class="btn btn-block">Log in</button>
+    </form>
+    <p class="auth-alt">New here? <a href="{% url 'accounts:register' %}">Create an account</a></p>
+  </div>
+</div>
+{% endblock %}

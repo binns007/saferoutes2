@@ -1,0 +1,96 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}SafeRoutes &mdash; Route {{ route.source.name }} to {{ route.destination.name }}{% endblock %}
+{% block nav_plan %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ route.source.name }} &rarr; {{ route.destination.name }}</h1>
+  <p class="lede">
+    {% if route.distance_km %}<span class="mono">{{ route.distance_km }} km</span>{% if route.duration_min %} &middot; <span class="mono">{{ route.duration_min|floatformat:0 }} min</span>{% endif %} &middot; {% endif %}
+    Route safety: <span class="mono">{% if route.route_safety_score is not None %}{{ route.route_safety_score|floatformat:1 }}/100{% else %}n/a{% endif %}</span>
+    &middot; Lowest district score on path:
+    <span class="mono">{% if route.min_safety_score_crossed is not None %}{{ route.min_safety_score_crossed|floatformat:1 }}/100{% else %}n/a{% endif %}</span>
+    &middot; Safety buffer: <span class="mono">{{ route.safety_buffer_km }} km</span>
+    {% if route.reroute_count %}&middot; Rerouted {{ route.reroute_count }}&times;{% endif %}
+  </p>
+  {% if route.routing_source == "straight_line" %}
+    <p class="alert-note" style="margin-top:8px;">
+      The road-routing service couldn&rsquo;t be reached, so this is a straight line between the district
+      centres &mdash; not a drivable route. Plan the route again later for real roads.
+    </p>
+  {% endif %}
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <div class="map-wrap"><div id="route-map"></div></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#1E2A4A"></span> Recommended path</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#35C4A1;opacity:.35"></span> {{ route.safety_buffer_km }} km safety buffer</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#9aa3b8"></span> Other roads considered</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#35C4A1"></span> Ping &mdash; safe</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#E8546B"></span> Ping &mdash; unsafe deviation</span>
+    </div>
+    <div style="margin-top:14px;border-top:1px solid #eef1f7;padding-top:14px;">
+      <button type="button" id="live-track-btn" class="btn">Track my live location</button>
+      <p id="live-track-status" class="alert-note" style="margin-top:8px;margin-bottom:0;">
+        Uses your device&rsquo;s GPS to check your real position against this route. Each position is sent to SafeRoutes and saved with this route so deviations can be detected; only you (and site admins) can see it, and it is never shared with anyone else.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Alerts on this journey</h2>
+    {% if emergency_contact %}
+      <p class="alert-note">Alerts appear in the app. <strong>{{ emergency_contact.name }}</strong> is emailed only if you press <em>Notify</em>{% if emergency_contact.auto_escalate %} or leave an alert unanswered for 60 seconds{% endif %}. Authorities are never contacted.
+        <a href="{% url 'accounts:emergency_contact' %}">Change</a></p>
+      <p><button type="button" id="notify-contact-btn" class="btn sr-btn-notify">Notify {{ emergency_contact.name }} now</button></p>
+    {% else %}
+      <p class="alert-note">Alerts appear in the app, for you only &mdash; SafeRoutes contacts no one on your behalf.
+        Want someone told if you need help? <a href="{% url 'accounts:emergency_contact' %}">Add an emergency contact</a>.</p>
+    {% endif %}
+    {% if alerts %}
+      {% for a in alerts %}
+        <div class="alert-row">
+          <span class="alert-icon {{ a.severity }}"></span>
+          <div style="flex:1;">
+            <strong>{{ a.get_severity_display }}</strong>
+            {% if a.acknowledged %}<span class="ack-chip">{{ a.get_user_response_display|default:"Acknowledged" }}</span>{% endif %}
+            <div style="font-size:0.85rem;color:var(--text-muted);">{{ a.message }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p style="color:var(--text-muted);">No deviation into an unsafe zone was detected on this simulated journey.</p>
+    {% endif %}
+    {% if alternatives|length > 1 %}
+      <h2 style="margin-top:22px;">Roads compared</h2>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th></th><th>Distance</th><th>Time</th><th>Avg. score</th><th>Lowest</th><th>Route score</th></tr></thead>
+          <tbody>
+            {% for a in alternatives %}
+              <tr>
+                <td>{% if a.chosen %}<strong>Chosen</strong>{% else %}Option {{ forloop.counter }}{% endif %}</td>
+                <td class="mono">{{ a.distance_km }} km</td>
+                <td class="mono">{% if a.duration_min %}{{ a.duration_min|floatformat:0 }} min{% else %}&mdash;{% endif %}</td>
+                <td class="mono">{{ a.mean_score|default_if_none:"&mdash;" }}</td>
+                <td class="mono">{{ a.min_score|default_if_none:"&mdash;" }}</td>
+                <td class="mono">{{ a.combined_score|default_if_none:"&mdash;" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="alert-note" style="margin-top:8px;">The safest road is chosen (route score = 70% average + 30% lowest district score along the path); ties go to the quicker road.</p>
+    {% endif %}
+    <p style="margin-top:18px;"><a class="btn btn-ghost" href="{% url 'dashboard:route_planner' %}">Plan another route</a></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>const ROUTE_ID = {{ route.id }};</script>
+<script src="{% static 'dashboard/js/route_detail.js' %}"></script>
+{% endblock %}
