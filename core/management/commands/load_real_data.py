@@ -52,10 +52,15 @@ def _opt_float(value):
     return float(value) if value not in (None, "") else None
 
 
+
 def _opt_int(value):
     return int(float(value)) if value not in (None, "") else None
 
-
+def _year_label(years):
+    years = sorted(years)
+    if len(years) > 1 and years[-1] - years[0] == len(years) - 1:
+        return f"{years[0]}-{years[-1]}"
+    return ", ".join(str(y) for y in years)   # gaps are shown, not hidden by a range
 class Command(BaseCommand):
     help = "Load Census + Kerala Police crime data from core/data/*.csv into the database."
 
@@ -64,14 +69,20 @@ class Command(BaseCommand):
         parser.add_argument("--crime-csv", default=str(DATA_DIR / "kerala_crime_against_women.csv"))
         parser.add_argument("--benchmarks-csv", default=str(DATA_DIR / "benchmark_cities.csv"))
         parser.add_argument("--years", type=int, default=3, help="Average over the latest N complete years (default 3)")
-
+        parser.add_argument("--per-district", action="store_true",
+                    help="Average each district over its own latest complete years instead of a shared window")
+        parser.add_argument("--since", type=int, default=2022,
+                    help="With --per-district: ignore years before this (default 2022)")
     @transaction.atomic
     def handle(self, *args, **options):
         district_rows = self._load_districts(options["districts_csv"])
         crime_by_district = self._aggregate_crime(options["crime_csv"], set(district_rows))
-        years = self._choose_years(crime_by_district, set(district_rows), options["years"])
-        self.stdout.write(f"Crime years used: {years[0]}-{years[-1]}" if len(years) > 1 else f"Crime year used: {years[0]}")
-
+        if options["per_district"]:
+            years_for = self._choose_years_per_district(crime_by_district, options["years"], options["since"])
+        else:
+            common = self._choose_years(crime_by_district, set(district_rows), options["years"])
+            self.stdout.write(f"Crime years used: {_year_label(common)}")
+            years_for = {name: common for name in district_rows}
         # data changed, so any previous clustering is stale
         DistrictClusterAssignment.objects.all().delete()
         SafetyCluster.objects.all().delete()
@@ -81,6 +92,7 @@ class Command(BaseCommand):
         CrimeRecord.objects.all().delete()
 
         for name, row in district_rows.items():
+            years = years_for[name]
             per_year = crime_by_district[name]
             rape = round(statistics.mean(per_year[y]["rape"] for y in years))
             kidnap = round(statistics.mean(per_year[y]["kidnapping"] for y in years))
@@ -98,7 +110,7 @@ class Command(BaseCommand):
                 "forest_cover_pct": _opt_float(row.get("forest_cover_pct")),
                 "population_growth_rate": _opt_float(row.get("population_growth_rate")),
                 "crime_rape": rape, "crime_kidnapping": kidnap, "crime_other_ipc_women": other,
-                "crime_years": f"{years[0]}-{years[-1]}" if len(years) > 1 else str(years[0]),
+                "crime_years": _year_label(years),
                 "data_source": "Census 2011; Kerala Police crime-against-women statistics",
                 "crime_rate_per_100k": None, "police_per_100k": None, "literacy_disparity": None,
             })
@@ -115,6 +127,19 @@ class Command(BaseCommand):
         self.stdout.write("Next: python manage.py train_clusters")
 
     # ------------------------------------------------------------------ helpers
+    def _choose_years_per_district(self, crime_by_district, n_years, since):
+        chosen = {}
+        for name, per_year in sorted(crime_by_district.items()):
+            usable = sorted(y for y, rec in per_year.items() if not rec["partial"] and y >= since)
+            if not usable:
+                raise CommandError(
+                    f"{name}: no complete year since {since} with every police unit reporting. "
+                    "Lower --since or fix the source."
+                )
+            chosen[name] = usable[-n_years:]
+            short = "" if len(chosen[name]) == n_years else f"  (only {len(chosen[name])} of {n_years} years)"
+            self.stdout.write(f"  {name}: {_year_label(chosen[name])}{short}")
+        return chosen
 
     def _load_districts(self, path):
         rows = {}

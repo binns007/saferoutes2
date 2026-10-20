@@ -100,29 +100,50 @@ def _find_table(soup):
     raise ParseError("no 'Crime Heads' table found on the page")
 
 
-def parse_table(html):
-    """Parse one unit's page -> list[YearFigures] (years with a published total)."""
-    soup = BeautifulSoup(html, "lxml")
-    table = _find_table(soup)
-
+def _extract_rows(soup):
+    """Rows as lists of cell text. Supports the site's div grid (div.mytable1) and plain <table>s."""
     rows = []
-    for tr in table.find_all("tr"):
-        cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
-        if cells:
-            rows.append(cells)
+    grid = soup.find("div", class_="mytable1")
+    if grid is not None:
+        for row in grid.find_all("div", recursive=False):
+            cells = [c.get_text(" ", strip=True) for c in row.find_all("div", recursive=False)]
+            if cells:
+                rows.append(cells)
+    else:
+        table = _find_table(soup)
+        for tr in table.find_all("tr"):
+            cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
+            if cells:
+                rows.append(cells)
+    if not rows or not re.search(r"crime\s*heads?", " ".join(rows[0]), re.I):
+        raise ParseError("no 'Crime Heads' table found on the page")
+    return rows
+
+
+def parse_table(html, current_year=None):
+    """Parse one unit's page -> list[YearFigures] (years with a published total)."""
+    current_year = current_year or date.today().year
+    soup = BeautifulSoup(html, "lxml")
+    rows = _extract_rows(soup)
 
     header = rows[0]
     year_cols = []  # (column index, year, partial)
     for idx, text in enumerate(header):
         m = _YEAR.match(text)
         if m:
-            year_cols.append((idx, int(m.group(1)), bool(re.search(r"up\s*to|till|upto", text, re.I))))
+            year = int(m.group(1))
+            labelled = bool(re.search(r"up\s*to|till|upto", text, re.I))
+            # the current year is incomplete even if the header doesn't say so
+            year_cols.append((idx, year, labelled or year >= current_year))
     if not year_cols:
         raise ParseError(f"no year columns in header {header}")
     head_col = next((i for i, t in enumerate(header) if re.search(r"crime\s*heads?", t, re.I)), 1)
 
     heads, total_row = [], None
     for cells in rows[1:]:
+        # the Total row sometimes drops the empty Sl.No cell; that is the only gap we repair
+        if len(cells) == len(header) - 1 and _TOTAL.match(cells[0]):
+            cells = [""] + cells
         if len(cells) != len(header):
             raise ParseError(
                 f"row {cells[:3]}... has {len(cells)} cells but the header has {len(header)}; "
@@ -140,11 +161,11 @@ def parse_table(html):
     out = []
     for _idx, year, partial in year_cols:
         total = total_row[year]
-        if total == 0 and not any(v[year] for _n, v in heads):
-            continue  # year not published for this unit
+        head_sum = sum(v[year] for _n, v in heads)
+        if total == 0:
+            continue  # year not published (or published without a total, which we can't use)
         rape = sum(v[year] for n, v in heads if _RAPE.search(n) and not _ATTEMPT.search(n))
         kidnap = sum(v[year] for n, v in heads if _KIDNAP.search(n))
-        head_sum = sum(v[year] for _n, v in heads)
         out.append(YearFigures(
             year=year, partial=partial, rape=rape, kidnapping=kidnap,
             other=max(total - rape - kidnap, 0), total=total, checksum_ok=(head_sum == total),
