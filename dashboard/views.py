@@ -102,11 +102,13 @@ def _matrix_rows(matrix):
 
 
 @login_required
+@login_required
 def route_planner(request):
     districts = District.objects.order_by("name")
     if request.method == "POST":
         destination = get_object_or_404(District, pk=request.POST.get("destination"))
 
+        # --- start from the user's own GPS location ---
         if request.POST.get("use_my_location") == "1":
             try:
                 lat, lon = float(request.POST["origin_lat"]), float(request.POST["origin_lon"])
@@ -124,14 +126,22 @@ def route_planner(request):
             route = plan_route(request.user, None, destination, origin=(lat, lon))
             return redirect(reverse("dashboard:route_detail", args=[route.pk]))
 
+        # --- start from a chosen district ---
         source = get_object_or_404(District, pk=request.POST.get("source"))
-        # ... rest unchanged
+        if source.pk == destination.pk:
+            return render(request, "dashboard/route_planner.html", {
+                "districts": districts,
+                "error": "Source and destination must be different."})
 
-    wants_sim = request.POST.get("simulate_deviation") == "on"
-    pings, alerts = simulate_journey(route, inject_deviation=wants_sim)
-    if wants_sim and not alerts:
-        messages.info(request, "No high-risk district lies off this route, so there was no deviation to simulate.")
-        
+        route = plan_route(request.user, source, destination)
+        wants_sim = request.POST.get("simulate_deviation") == "on"
+        pings, alerts = simulate_journey(route, inject_deviation=wants_sim)
+        if wants_sim and not alerts:
+            messages.info(
+                request,
+                "No high-risk district lies off this route, so there was no deviation to simulate.",
+            )
+        return redirect(reverse("dashboard:route_detail", args=[route.pk]))
 
     return render(request, "dashboard/route_planner.html", {"districts": districts})
 
