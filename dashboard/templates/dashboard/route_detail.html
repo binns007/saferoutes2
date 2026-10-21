@@ -1,93 +1,188 @@
 {% extends "dashboard/base.html" %}
 {% load static %}
-{% block title %}SafeRoutes &mdash; Route {{ route.source.name }} to {{ route.destination.name }}{% endblock %}
+{% block title %}SafeRoutes &mdash; Route {{ route.source_label }} to {{ route.destination.name }}{% endblock %}
 {% block nav_plan %}active{% endblock %}
 
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .fx {
+    --fx-bg: #070c1c; --fx-panel: rgba(18, 28, 56, 0.72); --fx-line: rgba(125, 249, 255, 0.18);
+    --fx-cyan: #7df9ff; --fx-teal: #35c4a1; --fx-amber: #f2a65a; --fx-coral: #e8546b;
+    --fx-text: #dfe7fb; --fx-dim: #8d9bc2;
+    position: relative; overflow: hidden; border-radius: 22px; padding: 34px 30px 36px;
+    background:
+      radial-gradient(900px 380px at 90% -10%, rgba(53, 196, 161, 0.2), transparent 60%),
+      radial-gradient(700px 360px at -5% 110%, rgba(125, 249, 255, 0.12), transparent 60%),
+      var(--fx-bg);
+    color: var(--fx-text); font-family: "Space Grotesk", var(--font-body); border: 1px solid var(--fx-line);
+  }
+  .fx::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.3;
+    background-image: linear-gradient(var(--fx-line) 1px, transparent 1px), linear-gradient(90deg, var(--fx-line) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(#000, transparent 55%); -webkit-mask-image: linear-gradient(#000, transparent 55%);
+  }
+  .fx > * { position: relative; }
+  .fx h1 { font-family: "Space Grotesk", var(--font-body); font-weight: 600; font-size: 2.3rem; letter-spacing: -0.03em; color: #fff; margin: 0 0 6px; }
+  .fx h1 .arrow { color: var(--fx-cyan); margin: 0 10px; text-shadow: 0 0 16px var(--fx-cyan); }
+  .fx h2 { font-family: inherit; font-size: 1.05rem; font-weight: 600; color: #fff; margin: 0 0 12px; }
+  .fx a { color: var(--fx-cyan); }
+  .fx .fx-note { color: var(--fx-dim); font-size: 0.84rem; line-height: 1.55; margin: 0 0 12px; }
+  .fx .fx-note strong { color: var(--fx-text); }
+  .fx-warn { background: rgba(242, 166, 90, 0.12); border: 1px solid rgba(242, 166, 90, 0.45); color: #ffd9b0; border-radius: 10px; padding: 10px 14px; font-size: 0.88rem; margin: 12px 0 0; }
+
+  /* telemetry strip */
+  .fx-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 22px 0 22px; }
+  .fx-stat { background: var(--fx-panel); border: 1px solid var(--fx-line); border-radius: 12px; padding: 12px 14px; }
+  .fx-stat span { display: block; font-size: 0.74rem; color: var(--fx-dim); margin-bottom: 4px; }
+  .fx-stat b { font-size: 1.45rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+  .fx-stat b small { font-size: 0.8rem; font-weight: 500; color: var(--fx-dim); margin-left: 3px; }
+  .fx-stat.good b { color: var(--fx-teal); text-shadow: 0 0 18px rgba(53, 196, 161, 0.5); }
+  .fx-stat.mid b { color: var(--fx-amber); }
+  .fx-stat.bad b { color: var(--fx-coral); }
+
+  .fx-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .fx-panel { background: var(--fx-panel); border: 1px solid var(--fx-line); border-radius: 16px; padding: 18px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .fx-panel + .fx-panel { margin-top: 18px; }
+
+  /* dark map: only the tile layer is inverted, so overlays keep their colours */
+  .fx .map-wrap { border: 1px solid var(--fx-line); border-radius: 12px; }
+  .fx #route-map { background: #0a1128; }
+  .fx #route-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.88) contrast(0.92) saturate(0.55); }
+  .fx #route-map path[stroke="#1E2A4A"] { stroke: #7df9ff; stroke-width: 4; filter: drop-shadow(0 0 5px #7df9ff); }
+  .fx .legend { color: var(--fx-dim); }
+
+  /* live tracking console */
+  .fx-live { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--fx-line); display: grid; gap: 10px; }
+  .fx-readout { font-size: 1.5rem; font-weight: 600; color: var(--fx-cyan); letter-spacing: -0.02em; min-height: 1.5em; text-shadow: 0 0 20px rgba(125, 249, 255, 0.4); }
+  .fx-readout:empty::before { content: "Live distance appears here once tracking starts"; font-size: 0.85rem; font-weight: 400; color: var(--fx-dim); text-shadow: none; letter-spacing: 0; }
+  .fx .btn { background: linear-gradient(95deg, var(--fx-teal), var(--fx-cyan)); color: #04101f; font-family: inherit; font-weight: 700; border-radius: 11px; box-shadow: 0 0 24px -8px var(--fx-cyan); }
+  .fx .btn:hover { background: linear-gradient(95deg, var(--fx-teal), var(--fx-cyan)); }
+  .fx .btn.btn-ghost { background: transparent; color: var(--fx-text); border: 1px solid var(--fx-line); box-shadow: none; }
+  .fx .btn.btn-ghost:hover { background: rgba(125, 249, 255, 0.08); }
+  .fx .btn.sr-btn-notify { background: var(--fx-coral); color: #fff; box-shadow: 0 0 22px -8px var(--fx-coral); }
+  .fx .btn:focus-visible { outline: 2px solid var(--fx-cyan); outline-offset: 2px; }
+  #replan-btn { display: none; }
+
+  /* alerts + table */
+  .fx .alert-row { border-bottom: 1px solid var(--fx-line); }
+  .fx .alert-row strong { color: #fff; }
+  .fx .alert-row div { color: var(--fx-dim) !important; }
+  .fx .alert-row strong + .ack-chip { background: rgba(125, 249, 255, 0.12); color: var(--fx-cyan); }
+  .fx .ack-chip { background: rgba(125, 249, 255, 0.12); color: var(--fx-cyan); }
+  .fx .data-table th { color: var(--fx-dim); border-bottom: 1px solid var(--fx-line); }
+  .fx .data-table td { color: var(--fx-text); border-bottom: 1px solid rgba(125, 249, 255, 0.08); }
+  .fx .data-table tr:hover td { background: rgba(125, 249, 255, 0.05); }
+  .fx .data-table tr.chosen td { background: rgba(53, 196, 161, 0.1); }
+  .fx .data-table tr.chosen td:first-child { box-shadow: inset 3px 0 var(--fx-teal); }
+  .fx-empty { color: var(--fx-dim); font-size: 0.92rem; margin: 6px 0 0; }
+
+  @media (max-width: 900px) { .fx-layout { grid-template-columns: 1fr; } .fx { padding: 24px 16px 26px; } .fx h1 { font-size: 1.6rem; } }
+  @media (prefers-reduced-motion: reduce) { .fx * { transition: none !important; animation: none !important; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <h1>{{ route.source.name }} &rarr; {{ route.destination.name }}</h1>
-  <p class="lede">
-    {% if route.distance_km %}<span class="mono">{{ route.distance_km }} km</span>{% if route.duration_min %} &middot; <span class="mono">{{ route.duration_min|floatformat:0 }} min</span>{% endif %} &middot; {% endif %}
-    Route safety: <span class="mono">{% if route.route_safety_score is not None %}{{ route.route_safety_score|floatformat:1 }}/100{% else %}n/a{% endif %}</span>
-    &middot; Lowest district score on path:
-    <span class="mono">{% if route.min_safety_score_crossed is not None %}{{ route.min_safety_score_crossed|floatformat:1 }}/100{% else %}n/a{% endif %}</span>
-    &middot; Safety buffer: <span class="mono">{{ route.safety_buffer_km }} km</span>
-    {% if route.reroute_count %}&middot; Rerouted {{ route.reroute_count }}&times;{% endif %}
-  </p>
+<section class="fx">
+  <h1>{{ route.source_label }}<span class="arrow" aria-hidden="true">&rarr;</span><span class="sr-only" style="position:absolute;left:-9999px;">to</span>{{ route.destination.name }}</h1>
+  {% if route.reroute_count %}<p class="fx-note" style="margin:0;">Rerouted {{ route.reroute_count }} time{{ route.reroute_count|pluralize }}. The original plan is shown in grey on the map.</p>{% endif %}
   {% if route.routing_source == "straight_line" %}
-    <p class="alert-note" style="margin-top:8px;">
+    <p class="fx-warn">
       The road-routing service couldn&rsquo;t be reached, so this is a straight line between the district
-      centres &mdash; not a drivable route. Plan the route again later for real roads.
+      centres, not a drivable route. Plan the route again later for real roads.
     </p>
   {% endif %}
-</div>
 
-<div class="grid grid-2">
-  <div class="card">
-    <div class="map-wrap"><div id="route-map"></div></div>
-    <div class="legend">
-      <span class="legend-item"><span class="legend-dot" style="background:#1E2A4A"></span> Recommended path</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#35C4A1;opacity:.35"></span> {{ route.safety_buffer_km }} km safety buffer</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#9aa3b8"></span> Other roads considered</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#35C4A1"></span> Ping &mdash; safe</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#E8546B"></span> Ping &mdash; unsafe deviation</span>
+  <div class="fx-stats">
+    {% if route.distance_km %}<div class="fx-stat"><span>Distance</span><b>{{ route.distance_km }}<small>km</small></b></div>{% endif %}
+    {% if route.duration_min %}<div class="fx-stat"><span>Drive time</span><b>{{ route.duration_min|floatformat:0 }}<small>min</small></b></div>{% endif %}
+    <div class="fx-stat {% if route.route_safety_score is None %}{% elif route.route_safety_score >= 65 %}good{% elif route.route_safety_score >= 40 %}mid{% else %}bad{% endif %}">
+      <span>Route safety</span>
+      <b>{% if route.route_safety_score is not None %}{{ route.route_safety_score|floatformat:1 }}<small>/100</small>{% else %}n/a{% endif %}</b>
     </div>
-    <div style="margin-top:14px;border-top:1px solid #eef1f7;padding-top:14px;">
-      <button type="button" id="live-track-btn" class="btn">Track my live location</button>
-      <p id="live-track-status" class="alert-note" style="margin-top:8px;margin-bottom:0;">
-        Uses your device&rsquo;s GPS to check your real position against this route. Each position is sent to SafeRoutes and saved with this route so deviations can be detected; only you (and site admins) can see it, and it is never shared with anyone else.
-      </p>
-    </div>
+    <div class="fx-stat"><span>Lowest district score</span><b>{% if route.min_safety_score_crossed is not None %}{{ route.min_safety_score_crossed|floatformat:1 }}<small>/100</small>{% else %}n/a{% endif %}</b></div>
+    <div class="fx-stat"><span>Safety buffer</span><b>{{ route.safety_buffer_km }}<small>km</small></b></div>
   </div>
 
-  <div class="card">
-    <h2>Alerts on this journey</h2>
-    {% if emergency_contact %}
-      <p class="alert-note">Alerts appear in the app. <strong>{{ emergency_contact.name }}</strong> is emailed only if you press <em>Notify</em>{% if emergency_contact.auto_escalate %} or leave an alert unanswered for 60 seconds{% endif %}. Authorities are never contacted.
-        <a href="{% url 'accounts:emergency_contact' %}">Change</a></p>
-      <p><button type="button" id="notify-contact-btn" class="btn sr-btn-notify">Notify {{ emergency_contact.name }} now</button></p>
-    {% else %}
-      <p class="alert-note">Alerts appear in the app, for you only &mdash; SafeRoutes contacts no one on your behalf.
-        Want someone told if you need help? <a href="{% url 'accounts:emergency_contact' %}">Add an emergency contact</a>.</p>
-    {% endif %}
-    {% if alerts %}
-      {% for a in alerts %}
-        <div class="alert-row">
-          <span class="alert-icon {{ a.severity }}"></span>
-          <div style="flex:1;">
-            <strong>{{ a.get_severity_display }}</strong>
-            {% if a.acknowledged %}<span class="ack-chip">{{ a.get_user_response_display|default:"Acknowledged" }}</span>{% endif %}
-            <div style="font-size:0.85rem;color:var(--text-muted);">{{ a.message }}</div>
-          </div>
+  <div class="fx-layout">
+    <div>
+      <div class="fx-panel">
+        <div class="map-wrap"><div id="route-map"></div></div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#7df9ff"></span> Recommended path</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#35C4A1;opacity:.35"></span> {{ route.safety_buffer_km }} km safety buffer</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#9aa3b8"></span> Other roads considered</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#35C4A1"></span> Ping: safe</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#E8546B"></span> Ping: unsafe deviation</span>
         </div>
-      {% endfor %}
-    {% else %}
-      <p style="color:var(--text-muted);">No deviation into an unsafe zone was detected on this simulated journey.</p>
-    {% endif %}
-    {% if alternatives|length > 1 %}
-      <h2 style="margin-top:22px;">Roads compared</h2>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th></th><th>Distance</th><th>Time</th><th>Avg. score</th><th>Lowest</th><th>Route score</th></tr></thead>
-          <tbody>
-            {% for a in alternatives %}
-              <tr>
-                <td>{% if a.chosen %}<strong>Chosen</strong>{% else %}Option {{ forloop.counter }}{% endif %}</td>
-                <td class="mono">{{ a.distance_km }} km</td>
-                <td class="mono">{% if a.duration_min %}{{ a.duration_min|floatformat:0 }} min{% else %}&mdash;{% endif %}</td>
-                <td class="mono">{{ a.mean_score|default_if_none:"&mdash;" }}</td>
-                <td class="mono">{{ a.min_score|default_if_none:"&mdash;" }}</td>
-                <td class="mono">{{ a.combined_score|default_if_none:"&mdash;" }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+
+        <div class="fx-live">
+          <div id="live-distance" class="fx-readout" role="status"></div>
+          <button type="button" id="live-track-btn" class="btn">Track my live location</button>
+          <button type="button" id="replan-btn" class="btn btn-ghost">Re-plan from my location</button>
+          <p id="live-track-status" class="fx-note" style="margin:0;">
+            Uses your device&rsquo;s GPS to check your real position against this route. Each position is sent to SafeRoutes and saved with this route so deviations can be detected. Only you (and site admins) can see it; it is never shared with anyone else.
+          </p>
+        </div>
       </div>
-      <p class="alert-note" style="margin-top:8px;">The safest road is chosen (route score = 70% average + 30% lowest district score along the path); ties go to the quicker road.</p>
-    {% endif %}
-    <p style="margin-top:18px;"><a class="btn btn-ghost" href="{% url 'dashboard:route_planner' %}">Plan another route</a></p>
+    </div>
+
+    <div>
+      <div class="fx-panel">
+        <h2>Alerts on this journey</h2>
+        {% if emergency_contact %}
+          <p class="fx-note">Alerts appear in the app. <strong>{{ emergency_contact.name }}</strong> is emailed only if you press <em>Notify</em>{% if emergency_contact.auto_escalate %} or leave an alert unanswered for 60 seconds{% endif %}. Authorities are never contacted.
+            <a href="{% url 'accounts:emergency_contact' %}">Change</a></p>
+          <p><button type="button" id="notify-contact-btn" class="btn sr-btn-notify">Notify {{ emergency_contact.name }} now</button></p>
+        {% else %}
+          <p class="fx-note">Alerts appear in the app, for you only. SafeRoutes contacts no one on your behalf.
+            Want someone told if you need help? <a href="{% url 'accounts:emergency_contact' %}">Add an emergency contact</a>.</p>
+        {% endif %}
+        {% if alerts %}
+          {% for a in alerts %}
+            <div class="alert-row">
+              <span class="alert-icon {{ a.severity }}"></span>
+              <div style="flex:1;">
+                <strong>{{ a.get_severity_display }}</strong>
+                {% if a.acknowledged %}<span class="ack-chip">{{ a.get_user_response_display|default:"Acknowledged" }}</span>{% endif %}
+                <div style="font-size:0.85rem;">{{ a.message }}</div>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="fx-empty">No deviation into an unsafe zone has been detected on this journey.</p>
+        {% endif %}
+      </div>
+
+      {% if alternatives|length > 1 %}
+      <div class="fx-panel">
+        <h2>Roads compared</h2>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th></th><th>Distance</th><th>Time</th><th>Avg.</th><th>Lowest</th><th>Score</th></tr></thead>
+            <tbody>
+              {% for a in alternatives %}
+                <tr{% if a.chosen %} class="chosen"{% endif %}>
+                  <td>{% if a.chosen %}<strong>Chosen</strong>{% else %}Option {{ forloop.counter }}{% endif %}</td>
+                  <td class="mono">{{ a.distance_km }} km</td>
+                  <td class="mono">{% if a.duration_min %}{{ a.duration_min|floatformat:0 }} min{% else %}&ndash;{% endif %}</td>
+                  <td class="mono">{{ a.mean_score|default_if_none:"–" }}</td>
+                  <td class="mono">{{ a.min_score|default_if_none:"–" }}</td>
+                  <td class="mono">{{ a.combined_score|default_if_none:"–" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="fx-note" style="margin-top:10px;">The safest road is chosen. Route score = 70% average + 30% lowest district score along the path; ties go to the quicker road.</p>
+      </div>
+      {% endif %}
+
+      <p style="margin:18px 0 0;"><a class="btn btn-ghost" href="{% url 'dashboard:route_planner' %}">Plan another route</a></p>
+    </div>
   </div>
-</div>
+</section>
 {% endblock %}
 
 {% block extra_scripts %}

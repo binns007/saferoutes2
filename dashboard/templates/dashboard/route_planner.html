@@ -2,38 +2,197 @@
 {% block title %}SafeRoutes &mdash; Plan a Route{% endblock %}
 {% block nav_plan %}active{% endblock %}
 
-{% block content %}
-<div class="page-header">
-  <h1>Plan a route</h1>
-  <p class="lede">
-    Pick a source and destination district. SafeRoutes fetches the available
-    road routes between them, scores each against the district safety map,
-    recommends the safest one, and draws a 1.96&times;&sigma; safety buffer
-    around it.
-  </p>
-</div>
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .fx {
+    --fx-bg: #070c1c; --fx-panel: rgba(18, 28, 56, 0.72); --fx-line: rgba(125, 249, 255, 0.18);
+    --fx-cyan: #7df9ff; --fx-teal: #35c4a1; --fx-amber: #f2a65a; --fx-coral: #e8546b;
+    --fx-text: #dfe7fb; --fx-dim: #8d9bc2;
+    position: relative; overflow: hidden; border-radius: 22px; padding: 40px 36px 44px;
+    background:
+      radial-gradient(900px 400px at 85% -10%, rgba(53, 196, 161, 0.22), transparent 60%),
+      radial-gradient(700px 380px at -5% 110%, rgba(125, 249, 255, 0.14), transparent 60%),
+      var(--fx-bg);
+    color: var(--fx-text); font-family: "Space Grotesk", var(--font-body);
+    border: 1px solid var(--fx-line);
+  }
+  .fx::before { /* blueprint grid */
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(var(--fx-line) 1px, transparent 1px), linear-gradient(90deg, var(--fx-line) 1px, transparent 1px);
+    background-size: 44px 44px; opacity: 0.35;
+    mask-image: radial-gradient(ellipse at 70% 30%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 70% 30%, #000 20%, transparent 75%);
+  }
+  .fx > * { position: relative; }
+  .fx h1 { font-family: "Space Grotesk", var(--font-body); font-weight: 600; font-size: 2.6rem; letter-spacing: -0.03em; color: #fff; margin: 0 0 10px; }
+  .fx .fx-lede { color: var(--fx-dim); max-width: 56ch; margin: 0 0 30px; font-size: 1rem; line-height: 1.6; }
+  .fx-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 22px; align-items: start; }
+  .fx-panel { background: var(--fx-panel); border: 1px solid var(--fx-line); border-radius: 16px; padding: 24px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .fx label { color: var(--fx-dim); font-size: 0.82rem; margin-bottom: 8px; }
+  .fx select {
+    background: rgba(7, 12, 28, 0.8); color: #fff; border: 1px solid var(--fx-line); border-radius: 10px;
+    padding: 12px 14px; font-family: inherit; font-size: 1rem;
+  }
+  .fx select:focus-visible, .fx .btn:focus-visible, .fx-switch input:focus-visible + .fx-track { outline: 2px solid var(--fx-cyan); outline-offset: 2px; }
+  .fx select:disabled { opacity: 0.35; }
+  .fx .field { margin-bottom: 20px; }
 
-<div class="card" style="max-width:520px;">
-  {% if error %}<p style="color:var(--risk-coral);">{{ error }}</p>{% endif %}
-  <form method="post">
-    {% csrf_token %}
-    <div class="field">
-      <label for="source">Source district</label>
-      <select name="source" id="source" required>
-        {% for d in districts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
-      </select>
+  /* source -> destination rail */
+  .fx-rail { display: grid; grid-template-columns: 14px 1fr; gap: 0 16px; }
+  .fx-rail-line { display: flex; flex-direction: column; align-items: center; padding-top: 34px; }
+  .fx-node { width: 12px; height: 12px; border-radius: 50%; background: var(--fx-teal); box-shadow: 0 0 14px var(--fx-teal); }
+  .fx-node.end { background: var(--fx-amber); box-shadow: 0 0 14px var(--fx-amber); }
+  .fx-stem { flex: 1; width: 2px; margin: 4px 0; background: repeating-linear-gradient(var(--fx-cyan) 0 4px, transparent 4px 9px); opacity: 0.55; min-height: 70px; }
+
+  /* switches */
+  .fx-switch { display: flex; align-items: center; gap: 14px; cursor: pointer; margin: 0 0 6px; color: var(--fx-text); font-size: 0.95rem; }
+  .fx-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .fx-track { flex: none; width: 44px; height: 24px; border-radius: 99px; background: rgba(141, 155, 194, 0.25); border: 1px solid var(--fx-line); position: relative; transition: background 0.2s; }
+  .fx-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--fx-dim); transition: transform 0.2s, background 0.2s; }
+  .fx-switch input:checked + .fx-track { background: rgba(53, 196, 161, 0.35); }
+  .fx-switch input:checked + .fx-track::after { transform: translateX(20px); background: var(--fx-cyan); box-shadow: 0 0 10px var(--fx-cyan); }
+  .fx-switch input:disabled + .fx-track { opacity: 0.35; }
+  .fx-hint { margin: 2px 0 18px 58px; font-size: 0.8rem; color: var(--fx-dim); min-height: 1.1em; }
+
+  .fx .btn { width: 100%; background: linear-gradient(95deg, var(--fx-teal), var(--fx-cyan)); color: #04101f; font-family: inherit; font-weight: 700; font-size: 1rem; padding: 15px 20px; border-radius: 12px; box-shadow: 0 0 28px -6px var(--fx-cyan); transition: transform 0.15s, box-shadow 0.15s; }
+  .fx .btn:hover { transform: translateY(-1px); box-shadow: 0 0 36px -4px var(--fx-cyan); background: linear-gradient(95deg, var(--fx-teal), var(--fx-cyan)); }
+
+  /* readout panel */
+  .fx-read { text-align: left; }
+  .fx-read h2 { font-family: inherit; font-size: 0.95rem; font-weight: 500; color: var(--fx-dim); margin: 0 0 14px; }
+  .fx-big { font-size: 4rem; line-height: 1; font-weight: 700; color: #fff; letter-spacing: -0.04em; text-shadow: 0 0 30px rgba(125, 249, 255, 0.45); }
+  .fx-big small { font-size: 1.2rem; font-weight: 500; color: var(--fx-cyan); margin-left: 6px; letter-spacing: 0; }
+  .fx-read p { color: var(--fx-dim); font-size: 0.9rem; line-height: 1.55; margin: 12px 0 0; }
+  .fx-steps { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
+  .fx-steps li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 0.88rem; color: var(--fx-text); }
+  .fx-steps b { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--fx-line); color: var(--fx-cyan); font-weight: 600; font-size: 0.78rem; }
+  .fx-error { background: rgba(232, 84, 107, 0.14); border: 1px solid rgba(232, 84, 107, 0.5); color: #ffc4cd; padding: 12px 14px; border-radius: 10px; margin: 0 0 18px; font-size: 0.92rem; }
+
+  @media (max-width: 860px) { .fx-layout { grid-template-columns: 1fr; } .fx { padding: 26px 18px 30px; } .fx h1 { font-size: 2rem; } }
+  @media (prefers-reduced-motion: reduce) { .fx * { transition: none !important; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="fx">
+  <h1>Plan a safer route</h1>
+  <p class="fx-lede">
+    Choose where you&rsquo;re headed. SafeRoutes compares the available roads against the district safety map,
+    picks the safest, and draws a 1.96&times;&sigma; corridor around it. Start from a district, or from wherever you are right now.
+  </p>
+
+  <div class="fx-layout">
+    <div class="fx-panel">
+      {% if error %}<p class="fx-error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="fx-rail">
+          <div class="fx-rail-line"><span class="fx-node"></span><span class="fx-stem"></span><span class="fx-node end"></span></div>
+          <div>
+            <div class="field">
+              <label for="source">From</label>
+              <select name="source" id="source" required>
+                {% for d in districts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="destination">To</label>
+              <select name="destination" id="destination" required>
+                {% for d in districts %}<option value="{{ d.id }}" data-lat="{{ d.latitude }}" data-lon="{{ d.longitude }}" {% if forloop.counter == 2 %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <label class="fx-switch">
+          <input type="checkbox" id="use_my_location" name="use_my_location" value="1">
+          <span class="fx-track" aria-hidden="true"></span>
+          Start from my current location
+        </label>
+        <p id="loc-status" class="fx-hint" role="status"></p>
+        <input type="hidden" name="origin_lat" id="origin_lat">
+        <input type="hidden" name="origin_lon" id="origin_lon">
+
+        <label class="fx-switch">
+          <input type="checkbox" name="simulate_deviation" id="simulate_deviation" checked>
+          <span class="fx-track" aria-hidden="true"></span>
+          Simulate a mid-journey deviation
+        </label>
+        <p class="fx-hint">Demo only. Turns off when you use your own location.</p>
+
+        <button type="submit" class="btn">Find the safest route</button>
+      </form>
     </div>
-    <div class="field">
-      <label for="destination">Destination district</label>
-      <select name="destination" id="destination" required>
-        {% for d in districts %}<option value="{{ d.id }}" {% if forloop.counter == 2 %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" name="simulate_deviation" id="simulate_deviation" checked>
-      <label for="simulate_deviation" style="margin:0;">Simulate a mid-journey deviation (to demo the alert system)</label>
-    </div>
-    <button type="submit" class="btn">Plan &amp; simulate route</button>
-  </form>
-</div>
+
+    <aside class="fx-panel fx-read" aria-live="polite">
+      <h2>Distance to destination</h2>
+      <div class="fx-big" id="fx-distance">&mdash;<small>km</small></div>
+      <p id="fx-distance-note">Turn on &ldquo;Start from my current location&rdquo; to see how far you are in a straight line.</p>
+      <ul class="fx-steps">
+        <li><b>1</b><span>Road options are fetched and each one is scored district by district.</span></li>
+        <li><b>2</b><span>The safest road wins; ties go to the quicker one.</span></li>
+        <li><b>3</b><span>Open the route and press <em>Track my live location</em> for deviation alerts.</span></li>
+      </ul>
+    </aside>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const cb = document.getElementById("use_my_location");
+  const src = document.getElementById("source");
+  const dst = document.getElementById("destination");
+  const sim = document.getElementById("simulate_deviation");
+  const status = document.getElementById("loc-status");
+  const latEl = document.getElementById("origin_lat"), lonEl = document.getElementById("origin_lon");
+  const big = document.getElementById("fx-distance"), note = document.getElementById("fx-distance-note");
+
+  function km(a, b, c, d) {
+    const R = 6371.0088, r = Math.PI / 180;
+    const h = Math.sin((c - a) * r / 2) ** 2 +
+      Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function showDistance() {
+    if (!latEl.value) return;
+    const o = dst.selectedOptions[0];
+    const d = km(+latEl.value, +lonEl.value, +o.dataset.lat, +o.dataset.lon);
+    big.innerHTML = d.toFixed(0) + "<small>km</small>";
+    note.textContent = "Straight line from your location to " + o.text + ". Road distance will be longer.";
+  }
+
+  function reset() {
+    big.innerHTML = "&mdash;<small>km</small>";
+    note.textContent = "Turn on \u201cStart from my current location\u201d to see how far you are in a straight line.";
+  }
+
+  cb.addEventListener("change", () => {
+    if (!cb.checked) {
+      src.disabled = false; sim.disabled = false;
+      latEl.value = lonEl.value = ""; status.textContent = ""; reset();
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      cb.checked = false; status.textContent = "This device doesn\u2019t support location."; return;
+    }
+    status.textContent = "Getting your location\u2026";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        latEl.value = pos.coords.latitude; lonEl.value = pos.coords.longitude;
+        src.disabled = true;                          // not submitted: the server uses your coordinates
+        sim.checked = false; sim.disabled = true;     // real tracking replaces the simulation
+        status.textContent = "Location locked (\u00b1" + Math.round(pos.coords.accuracy) + " m).";
+        showDistance();
+      },
+      (err) => { cb.checked = false; status.textContent = "Couldn\u2019t get your location: " + err.message; },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  });
+  dst.addEventListener("change", showDistance);
+})();
+</script>
 {% endblock %}

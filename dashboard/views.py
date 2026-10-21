@@ -13,6 +13,7 @@ from tracking.geometry import buffer_polygon
 from tracking.models import Alert, Route
 from tracking import services as tracking_services
 from tracking.services import plan_route, record_live_ping, reroute_route, simulate_journey
+from django.contrib import messages
 
 
 def api_login_required(view):
@@ -104,16 +105,33 @@ def _matrix_rows(matrix):
 def route_planner(request):
     districts = District.objects.order_by("name")
     if request.method == "POST":
-        source = get_object_or_404(District, pk=request.POST.get("source"))
         destination = get_object_or_404(District, pk=request.POST.get("destination"))
-        if source.pk == destination.pk:
-            return render(request, "dashboard/route_planner.html", {
-                "districts": districts,
-                "error": "Source and destination must be different districts.",
-            })
-        route = plan_route(request.user, source, destination)
-        simulate_journey(route, inject_deviation=request.POST.get("simulate_deviation") == "on")
-        return redirect(reverse("dashboard:route_detail", args=[route.pk]))
+
+        if request.POST.get("use_my_location") == "1":
+            try:
+                lat, lon = float(request.POST["origin_lat"]), float(request.POST["origin_lon"])
+                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                    raise ValueError
+            except (KeyError, ValueError):
+                return render(request, "dashboard/route_planner.html", {
+                    "districts": districts,
+                    "error": "Couldn't read your location. Allow location access and try again."})
+            _d, _s, _t, dist_km = tracking_services.DistrictIndex().nearest(lat, lon)
+            if dist_km > 150:
+                return render(request, "dashboard/route_planner.html", {
+                    "districts": districts,
+                    "error": "Your location is outside Kerala, which is all SafeRoutes covers."})
+            route = plan_route(request.user, None, destination, origin=(lat, lon))
+            return redirect(reverse("dashboard:route_detail", args=[route.pk]))
+
+        source = get_object_or_404(District, pk=request.POST.get("source"))
+        # ... rest unchanged
+
+    wants_sim = request.POST.get("simulate_deviation") == "on"
+    pings, alerts = simulate_journey(route, inject_deviation=wants_sim)
+    if wants_sim and not alerts:
+        messages.info(request, "No high-risk district lies off this route, so there was no deviation to simulate.")
+        
 
     return render(request, "dashboard/route_planner.html", {"districts": districts})
 
@@ -172,7 +190,7 @@ def api_route_data(request, route_id):
     } for p in route.pings.select_related("nearest_district")]
     alerts = [_alert_payload(a) for a in route.alerts.select_related("ping")]
     return JsonResponse({
-        "source": route.source.name,
+        "source": route.source_label,
         "destination": route.destination.name,
         "waypoints": route.waypoints,
         "original_waypoints": route.original_waypoints,
@@ -185,6 +203,8 @@ def api_route_data(request, route_id):
         "pings": pings,
         "alerts": alerts,
         "emergency_contact": _contact_payload(request.user),
+        "destination_lat": route.destination.latitude,
+        "destination_lon": route.destination.longitude,
     })
 
 

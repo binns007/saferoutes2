@@ -41,6 +41,14 @@ class Route(models.Model):
         null=True, blank=True, help_text="When the owner's emergency contact was last emailed about this route."
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    origin_lat = models.FloatField(null=True, blank=True, help_text="Exact start when planned from the user's own location")
+    origin_lon = models.FloatField(null=True, blank=True)
+
+    @property
+    def source_label(self):
+        if self.origin_lat is not None:
+            return f"Your location (near {self.source.name})"
+        return self.source.name
  
     def __str__(self):
         return f"Route {self.source.name} -> {self.destination.name} (#{self.pk})"

@@ -194,11 +194,17 @@ def _plan_paths(origin, destination, index):
     }
 
 
-def plan_route(user, source: District, destination: District) -> Route:
+def plan_route(user, source, destination, origin=None):
+    """`origin` = (lat, lon) of the user; then `source` may be None (nearest district is used)."""
     index = DistrictIndex()
-    fields = _plan_paths(
-        (source.latitude, source.longitude), (destination.latitude, destination.longitude), index
-    )
+    if origin is not None:
+        source = source or index.nearest(*origin)[0]
+        start = origin
+    else:
+        start = (source.latitude, source.longitude)
+    fields = _plan_paths(start, (destination.latitude, destination.longitude), index)
+    if origin is not None:
+        fields.update(origin_lat=origin[0], origin_lon=origin[1])
     return Route.objects.create(user=user, source=source, destination=destination, **fields)
 
 
@@ -247,7 +253,14 @@ def _make_alert(route, ping, nearest, tier, score, deviation_km, live):
         ),
     )
 
-
+def _pick_deviation_target(index, route, ref_lat, ref_lon):
+    """Nearest unsafe district whose centre is clearly outside the safety buffer."""
+    candidates = []
+    for d in index.unsafe_districts():
+        off_path = distance_to_polyline_km(d.latitude, d.longitude, route.waypoints)
+        if off_path > route.safety_buffer_km + 1.0:
+            candidates.append((haversine_km(ref_lat, ref_lon, d.latitude, d.longitude), d))
+    return min(candidates, key=lambda c: c[0])[1] if candidates else None
 def simulate_journey(route: Route, inject_deviation: bool = True):
     """
     Walk SIM_PING_COUNT points spread evenly along the planned path. If
@@ -267,14 +280,9 @@ def simulate_journey(route: Route, inject_deviation: bool = True):
         actual_lat, actual_lon = lat, lon
 
         if i == deviate_index:
-            unsafe = index.unsafe_districts()
-            if unsafe:
-                target = min(unsafe, key=lambda d: haversine_km(lat, lon, d.latitude, d.longitude))
-                dist = haversine_km(lat, lon, target.latitude, target.longitude)
-                if dist > 0:
-                    pull = min(1.0, max(0.65, (2 * route.safety_buffer_km + 1.0) / dist))
-                    actual_lat = lat + (target.latitude - lat) * pull
-                    actual_lon = lon + (target.longitude - lon) * pull
+            target = _pick_deviation_target(index, route, lat, lon)
+            if target:
+                actual_lat, actual_lon = target.latitude, target.longitude
 
         nearest, score, tier, _ = index.nearest(actual_lat, actual_lon)
         deviation_km = distance_to_polyline_km(actual_lat, actual_lon, route.waypoints)
